@@ -26,7 +26,7 @@ COPY src ./src
 ENV HTTP_HOST=0.0.0.0 \
     STORAGE_ROOT=/data/mailbox
 
-EXPOSE 8765
+EXPOSE 8080
 
 # Create non-root user and set ownership on data dir
 RUN adduser --disabled-password --gecos "" --uid 10001 appuser && \
@@ -35,7 +35,7 @@ USER appuser
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-  CMD sh -c 'curl -fsS http://127.0.0.1:${PORT:-8765}/health/liveness || exit 1'
+  CMD sh -c 'curl -fsS http://127.0.0.1:${PORT:-8080}/health/liveness || exit 1'
 
 # Run the HTTP server on Railway's injected PORT at runtime
-CMD ["sh", "-c", "/bin/uv run python -m mcp_agent_mail.cli serve-http --host 0.0.0.0 --port ${PORT:-8765}"]
+CMD ["sh", "-c", "/bin/uv run python -m mcp_agent_mail.cli serve-http --host 0.0.0.0 --port ${PORT:-8080}"]
