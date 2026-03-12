@@ -18,7 +18,7 @@ WORKDIR /app
 # Copy project metadata and sync deps first for better caching
 COPY pyproject.toml README.md ./
 # Install runtime deps
-RUN uv sync --no-dev
+RUN /usr/local/bin/uv sync --no-dev
 
 # Copy source
 COPY src ./src
@@ -39,4 +39,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
   CMD sh -c 'curl -fsS http://127.0.0.1:${PORT:-8765}/health/liveness || exit 1'
 
 # Run the HTTP server on Railway's injected PORT at runtime
-CMD ["sh", "-c", "uv run python -m mcp_agent_mail.cli serve-http --host 0.0.0.0 --port ${PORT:-8765}"]
+CMD ["sh", "-c", "/usr/local/bin/uv run python -m mcp_agent_mail.cli serve-http --host 0.0.0.0 --port ${PORT:-8765}"]
