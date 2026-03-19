@@ -153,6 +153,41 @@ class TestBearerTokenAuth:
             )
             assert response.status_code == 200
 
+    @pytest.mark.asyncio
+    async def test_mail_debug_token_allows_mail_ui_without_mcp_bypass(self, isolated_env, monkeypatch):
+        """A mail debug token should grant temporary access to /mail without weakening /mcp auth."""
+        monkeypatch.setenv("HTTP_BEARER_TOKEN", "secret-token")
+        monkeypatch.setenv("HTTP_MAIL_DEBUG_TOKEN", "debug-mail-token")
+        monkeypatch.setenv("HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED", "false")
+        with contextlib.suppress(Exception):
+            _config.clear_settings_cache()
+
+        settings = _config.get_settings()
+        server = build_mcp_server()
+        app = build_http_app(settings, server)
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            unauthorized_mail = await client.get("/mail", follow_redirects=False)
+            assert unauthorized_mail.status_code == 401
+
+            debug_login = await client.get("/mail?debug_token=debug-mail-token", follow_redirects=False)
+            assert debug_login.status_code == 303
+            assert "agent_mail_debug=" in debug_login.headers.get("set-cookie", "")
+
+            cookie_header = debug_login.headers["set-cookie"].split(";", 1)[0]
+            cookie_name, cookie_value = cookie_header.split("=", 1)
+            client.cookies.set(cookie_name, cookie_value)
+
+            authorized_mail = await client.get("/mail")
+            assert authorized_mail.status_code == 200
+
+            mcp_response = await client.post(
+                settings.http.path,
+                json=_rpc("tools/call", {"name": "health_check", "arguments": {}}),
+            )
+            assert mcp_response.status_code == 401
+
 
 # =============================================================================
 # Test: Localhost Bypass

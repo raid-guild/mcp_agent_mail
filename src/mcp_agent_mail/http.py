@@ -11,6 +11,7 @@ import importlib
 import json
 import logging
 import re
+from urllib.parse import urlencode
 from collections.abc import MutableMapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +22,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import NoResultFound
@@ -218,10 +219,19 @@ def _configure_logging(settings: Settings) -> None:
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: FastAPI, token: str, allow_localhost: bool = False) -> None:
+    _MAIL_DEBUG_COOKIE = "agent_mail_debug"
+
+    def __init__(
+        self,
+        app: FastAPI,
+        token: str,
+        allow_localhost: bool = False,
+        mail_debug_token: str | None = None,
+    ) -> None:
         super().__init__(app)
         self._token = token
         self._allow_localhost = allow_localhost
+        self._mail_debug_token = mail_debug_token or ""
 
     @staticmethod
     def _is_localhost(host: str) -> bool:
@@ -248,6 +258,25 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if request.url.path.startswith("/health/") or request.url.path == "/api/health":
             return await call_next(request)
+        if request.url.path.startswith("/mail") and self._mail_debug_token:
+            cookie_token = request.cookies.get(self._MAIL_DEBUG_COOKIE, "")
+            if hmac.compare_digest(cookie_token, self._mail_debug_token):
+                return await call_next(request)
+            query_token = request.query_params.get("debug_token", "")
+            if hmac.compare_digest(query_token, self._mail_debug_token):
+                filtered_pairs = [(key, value) for key, value in request.query_params.multi_items() if key != "debug_token"]
+                new_query = urlencode(filtered_pairs, doseq=True)
+                redirect_target = str(request.url.replace(query=new_query))
+                response = RedirectResponse(url=redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+                response.set_cookie(
+                    self._MAIL_DEBUG_COOKIE,
+                    self._mail_debug_token,
+                    httponly=True,
+                    samesite="lax",
+                    secure=request.url.scheme == "https",
+                    max_age=60 * 60 * 12,
+                )
+                return response
         # Allow localhost without Authorization when enabled
         try:
             client_host = request.client.host if request.client else ""
@@ -1067,6 +1096,7 @@ def build_http_app(settings: Settings, server=None) -> FastAPI:
             BearerAuthMiddleware,
             token=settings.http.bearer_token,
             allow_localhost=bool(getattr(settings.http, "allow_localhost_unauthenticated", False)),
+            mail_debug_token=getattr(settings.http, "mail_debug_token", None),
         )
 
     # Optional CORS

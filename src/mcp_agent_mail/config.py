@@ -36,6 +36,7 @@ class HttpSettings:
     port: int
     path: str
     bearer_token: str | None
+    mail_debug_token: str | None
     # Basic per-IP limiter (legacy/simple)
     rate_limit_enabled: bool
     rate_limit_per_minute: int
@@ -296,6 +297,7 @@ def get_settings() -> Settings:
         port=_int(_decouple_config("HTTP_PORT", default="8765"), default=8765),
         path=_decouple_config("HTTP_PATH", default="/api/"),
         bearer_token=_decouple_config("HTTP_BEARER_TOKEN", default="") or None,
+        mail_debug_token=_decouple_config("HTTP_MAIL_DEBUG_TOKEN", default="") or None,
         rate_limit_enabled=_bool(_decouple_config("HTTP_RATE_LIMIT_ENABLED", default="false"), default=False),
         rate_limit_per_minute=_int(_decouple_config("HTTP_RATE_LIMIT_PER_MINUTE", default="60"), default=60),
         rate_limit_backend=_decouple_config("HTTP_RATE_LIMIT_BACKEND", default="memory").lower(),
